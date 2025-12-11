@@ -37,7 +37,7 @@
 
         /* Estilos de Impressão */
         @media print {
-            header, .sticky-tabs, .no-print { display: none !important; }
+            header, .sticky-tabs, .no-print, .calculator-widget { display: none !important; }
             body { background-color: white; }
             .print-container { box-shadow: none; border: none; padding: 0; }
         }
@@ -47,7 +47,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, Component } = React;
+        const { useState, useEffect, useMemo, useRef, Component } = React;
 
         // --- ERROR BOUNDARY ---
         class ErrorBoundary extends Component {
@@ -85,7 +85,9 @@
             'clock': <circle cx="12" cy="12" r="10"></circle>,
             'check': <polyline points="20 6 9 17 4 12"></polyline>,
             'filter': <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>,
-            'edit-2': <><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></>
+            'edit-2': <><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></>,
+            'calculator': <><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="14"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="8" y1="18" x2="8" y2="18"></line><line x1="12" y1="18" x2="12" y2="18"></line><line x1="16" y1="18" x2="16" y2="18"></line></>,
+            'x': <><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></>
         };
 
         const IconWrapper = ({ name, size = 20, className = "" }) => (
@@ -93,6 +95,125 @@
                 {icons[name] || null}
             </svg>
         );
+
+        // --- COMPONENTE CALCULADORA FLUTUANTE ---
+        const DraggableCalculator = ({ onClose }) => {
+            const [position, setPosition] = useState({ x: window.innerWidth/2 - 120, y: 100 });
+            const [isDragging, setIsDragging] = useState(false);
+            const [rel, setRel] = useState({ x: 0, y: 0 });
+            const [display, setDisplay] = useState('0');
+            const [expression, setExpression] = useState('');
+
+            // Lógica de movimentação
+            const handleMouseDown = (e) => {
+                if(e.target.closest('button')) return; // Não arrasta se clicar em botão
+                setIsDragging(true);
+                setRel({
+                    x: (e.pageX || e.touches[0].pageX) - position.x,
+                    y: (e.pageY || e.touches[0].pageY) - position.y
+                });
+            };
+
+            useEffect(() => {
+                const handleMouseMove = (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault(); // Previne scroll no mobile
+                    const pageX = e.pageX || (e.touches ? e.touches[0].pageX : 0);
+                    const pageY = e.pageY || (e.touches ? e.touches[0].pageY : 0);
+                    setPosition({
+                        x: pageX - rel.x,
+                        y: pageY - rel.y
+                    });
+                };
+                const handleMouseUp = () => setIsDragging(false);
+
+                if (isDragging) {
+                    window.addEventListener('mousemove', handleMouseMove);
+                    window.addEventListener('mouseup', handleMouseUp);
+                    window.addEventListener('touchmove', handleMouseMove, { passive: false });
+                    window.addEventListener('touchend', handleMouseUp);
+                }
+                return () => {
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                    window.removeEventListener('touchmove', handleMouseMove);
+                    window.removeEventListener('touchend', handleMouseUp);
+                };
+            }, [isDragging, rel]);
+
+            // Lógica da Calculadora
+            const handleBtnClick = (val) => {
+                if (val === 'C') {
+                    setDisplay('0');
+                    setExpression('');
+                } else if (val === '=') {
+                    try {
+                        const result = eval(expression.replace(/x/g, '*').replace(/%/g, '/100')); // Simples eval seguro para contexto local
+                        setDisplay(String(result));
+                        setExpression(String(result));
+                    } catch {
+                        setDisplay('Erro');
+                        setExpression('');
+                    }
+                } else {
+                    const nextExpr = (display === '0' || display === 'Erro' ? '' : expression) + val;
+                    setExpression(nextExpr);
+                    setDisplay(nextExpr);
+                }
+            };
+
+            const buttons = [
+                'C', '(', ')', '/',
+                '7', '8', '9', 'x',
+                '4', '5', '6', '-',
+                '1', '2', '3', '+',
+                '0', '.', '%', '='
+            ];
+
+            return (
+                <div 
+                    className="calculator-widget fixed z-50 bg-gray-900 rounded-xl shadow-2xl overflow-hidden border border-gray-700"
+                    style={{ left: position.x, top: position.y, width: '260px', touchAction: 'none' }}
+                >
+                    {/* Barra de Título (Arrastável) */}
+                    <div 
+                        onMouseDown={handleMouseDown}
+                        onTouchStart={handleMouseDown}
+                        className="bg-gray-800 p-2 cursor-move flex justify-between items-center select-none"
+                    >
+                        <span className="text-gray-400 text-xs font-bold flex items-center gap-2">
+                            <IconWrapper name="calculator" size={14}/> Calculadora
+                        </span>
+                        <button onClick={onClose} className="text-red-400 hover:text-red-200">
+                            <IconWrapper name="x" size={16}/>
+                        </button>
+                    </div>
+
+                    {/* Visor */}
+                    <div className="p-4 bg-gray-900 text-right">
+                        <div className="text-3xl text-white font-mono truncate">{display}</div>
+                    </div>
+
+                    {/* Teclado */}
+                    <div className="grid grid-cols-4 gap-1 p-2 bg-gray-800">
+                        {buttons.map((btn, i) => (
+                            <button 
+                                key={i} 
+                                onClick={() => handleBtnClick(btn)}
+                                className={`p-3 rounded font-bold text-lg transition-colors ${
+                                    btn === '=' ? 'bg-orange-500 text-white hover:bg-orange-600' :
+                                    btn === 'C' ? 'bg-red-900 text-red-100 hover:bg-red-800' :
+                                    ['/','x','-','+'].includes(btn) ? 'bg-gray-700 text-orange-400 hover:bg-gray-600' :
+                                    'bg-gray-700 text-white hover:bg-gray-600'
+                                }`}
+                            >
+                                {btn}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
 
         // --- HOOK PERSISTÊNCIA ---
         function usePersistentState(key, initialValue) {
@@ -186,6 +307,7 @@
         function FinancialApp() {
             // ESTADOS GLOBAIS
             const [view, setView] = useState('transactions'); 
+            const [showCalc, setShowCalc] = useState(false); // ESTADO DA CALCULADORA
             
             // ESTADOS DE DADOS
             const [financialEntries, setFinancialEntries] = usePersistentState('financialEntries_v4', []);
@@ -579,13 +701,18 @@
                             <h1 className="text-xl font-bold flex items-center gap-2"><IconWrapper name="dollar-sign" className="text-yellow-400" size={24}/> Agenda Financeira</h1>
                             <div className="flex gap-2">
                                 <button onClick={() => setView('settings')} className="p-2 bg-red-700 rounded hover:bg-red-600"><IconWrapper name="lock" size={20} /></button>
-                                {/* BOTÃO DE EXTRATO ADICIONADO AQUI */}
+                                {/* BOTÃO DE EXTRATO */}
                                 <button onClick={() => setView('statement')} className="p-2 bg-red-700 rounded hover:bg-red-600" title="Extrato de Pagos"><IconWrapper name="file-text" size={20}/></button>
+                                {/* BOTÃO DE CALCULADORA */}
+                                <button onClick={() => setShowCalc(!showCalc)} className={`p-2 rounded hover:bg-red-600 transition-colors ${showCalc ? 'bg-red-600 text-yellow-300' : 'bg-red-700'}`} title="Calculadora"><IconWrapper name="calculator" size={20}/></button>
                                 <button onClick={exportData} className="p-2 bg-red-700 rounded hover:bg-red-600"><IconWrapper name="download"/></button>
                                 <label className="p-2 bg-red-700 rounded hover:bg-red-600 cursor-pointer"><input type="file" onChange={importData} className="hidden" accept=".json" /><IconWrapper name="refresh-cw"/></label>
                             </div>
                         </div>
                     </header>
+
+                    {/* CALCULADORA FLUTUANTE */}
+                    {showCalc && <DraggableCalculator onClose={() => setShowCalc(false)} />}
 
                     <div className="bg-white shadow px-4 pt-4 pb-2 sticky top-16 z-40 sticky-tabs">
                         <div className="flex space-x-1 overflow-x-auto hide-scrollbar">
