@@ -34,6 +34,13 @@
         /* Scroll escondido mas funcional */
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Estilos de Impressão */
+        @media print {
+            header, .sticky-tabs, .no-print { display: none !important; }
+            body { background-color: white; }
+            .print-container { box-shadow: none; border: none; padding: 0; }
+        }
     </style>
 </head>
 <body class="text-gray-900">
@@ -109,7 +116,7 @@
             let cumulativeAngle = 0;
 
             return (
-                <div className="flex flex-col items-center bg-white p-6 rounded-xl shadow-lg border border-gray-100 mt-8 mb-8">
+                <div className="flex flex-col items-center bg-white p-6 rounded-xl shadow-lg border border-gray-100 mt-8 mb-8 no-print">
                     <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><IconWrapper name="pie-chart" className="text-purple-500"/> Distribuição Financeira</h3>
                     <p className="text-xs text-gray-400 mb-4">Toque nas fatias para ver detalhes</p>
                     <div className="relative w-48 h-48">
@@ -128,12 +135,12 @@
                                 
                                 if (validData.length === 1) {
                                     return <circle 
-                                        key={index} 
-                                        cx="0" cy="0" r="1" 
-                                        fill={slice.color} 
-                                        onClick={() => onSliceClick && onSliceClick(slice.label)}
-                                        style={{ cursor: 'pointer' }}
-                                    />;
+                                            key={index} 
+                                            cx="0" cy="0" r="1" 
+                                            fill={slice.color} 
+                                            onClick={() => onSliceClick && onSliceClick(slice.label)}
+                                            style={{ cursor: 'pointer' }}
+                                        />;
                                 }
 
                                 const pathData = [
@@ -231,7 +238,7 @@
             const chartData = useMemo(() => {
                 const totalReceivable = userLoans.reduce((acc, curr) => acc + curr.value, 0);
                 const totalCardDebt = financialEntries
-                    .filter(e => e.method === 'Cartão Crédito' && e.type === 'expense')
+                    .filter(e => e.method === 'Cartão Crédito' && e.type === 'expense' && e.status === 'pending') // CORRIGIDO PARA MOSTRAR SÓ PENDENTE NO GRÁFICO TBM
                     .reduce((acc, curr) => acc + curr.value, 0);
                 const currentBalance = summary.balance;
                 return [
@@ -253,9 +260,11 @@
                 else if (label === 'Gasto c/ Cartão') setView('cards');
             };
 
-            // LÓGICA FINANCEIRA AUXILIAR
+            // LÓGICA FINANCEIRA AUXILIAR - CORRIGIDA AQUI
             const getTotalCardUsage = (cardId) => {
-                return financialEntries.filter(e => e.method === 'Cartão Crédito' && e.cardId === cardId && e.type === 'expense').reduce((acc, curr) => acc + curr.value, 0);
+                return financialEntries
+                    .filter(e => e.method === 'Cartão Crédito' && e.cardId === cardId && e.type === 'expense' && e.status === 'pending') // CORREÇÃO: Filtra apenas 'pending'
+                    .reduce((acc, curr) => acc + curr.value, 0);
             };
 
             const getCurrentInvoiceValue = (cardId) => {
@@ -570,13 +579,15 @@
                             <h1 className="text-xl font-bold flex items-center gap-2"><IconWrapper name="dollar-sign" className="text-yellow-400" size={24}/> Agenda Financeira</h1>
                             <div className="flex gap-2">
                                 <button onClick={() => setView('settings')} className="p-2 bg-red-700 rounded hover:bg-red-600"><IconWrapper name="lock" size={20} /></button>
+                                {/* BOTÃO DE EXTRATO ADICIONADO AQUI */}
+                                <button onClick={() => setView('statement')} className="p-2 bg-red-700 rounded hover:bg-red-600" title="Extrato de Pagos"><IconWrapper name="file-text" size={20}/></button>
                                 <button onClick={exportData} className="p-2 bg-red-700 rounded hover:bg-red-600"><IconWrapper name="download"/></button>
                                 <label className="p-2 bg-red-700 rounded hover:bg-red-600 cursor-pointer"><input type="file" onChange={importData} className="hidden" accept=".json" /><IconWrapper name="refresh-cw"/></label>
                             </div>
                         </div>
                     </header>
 
-                    <div className="bg-white shadow px-4 pt-4 pb-2 sticky top-16 z-40">
+                    <div className="bg-white shadow px-4 pt-4 pb-2 sticky top-16 z-40 sticky-tabs">
                         <div className="flex space-x-1 overflow-x-auto hide-scrollbar">
                             <button onClick={() => setView('transactions')} className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${view === 'transactions' ? 'bg-red-100 text-red-800' : 'text-gray-500 hover:bg-gray-50'}`}>Fluxo</button>
                             <button onClick={() => setView('cards')} className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${view === 'cards' ? 'bg-purple-100 text-purple-800' : 'text-gray-500 hover:bg-gray-50'}`}>Cartões</button>
@@ -589,6 +600,58 @@
 
                     <main className="container mx-auto p-4 flex-grow animate-fadeIn">
                         
+                        {/* NOVA TELA DE EXTRATO */}
+                        {view === 'statement' && (
+                            <div className="bg-white p-6 rounded-xl shadow-lg animate-fadeIn print-container">
+                                <div className="flex justify-between items-center mb-6 border-b pb-4 no-print">
+                                    <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                        <IconWrapper name="file-text" className="text-red-800"/> Extrato de Pagamentos
+                                    </h2>
+                                    <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-700">
+                                        Imprimir
+                                    </button>
+                                </div>
+                                <div className="hidden print:block mb-4 text-center">
+                                    <h1 className="text-xl font-bold">Relatório de Pagamentos Realizados</h1>
+                                    <p className="text-sm text-gray-500">Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
+                                </div>
+                                
+                                <div className="mb-6 bg-green-50 p-4 rounded-lg border border-green-200">
+                                     <p className="text-sm text-green-800 font-bold uppercase">Total Pago</p>
+                                     <p className="text-3xl font-bold text-green-700">R$ {financialEntries.filter(e => e.status === 'paid' && e.type === 'expense').reduce((acc, curr) => acc + curr.value, 0).toFixed(2)}</p>
+                                </div>
+
+                                <table className="w-full text-sm text-left">
+                                    <thead>
+                                        <tr className="border-b-2 border-gray-100 text-gray-500 uppercase text-xs">
+                                            <th className="py-2">Data</th>
+                                            <th className="py-2">Descrição</th>
+                                            <th className="py-2">Categoria</th>
+                                            <th className="py-2 text-right">Valor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {financialEntries
+                                            .filter(e => e.status === 'paid' && e.type === 'expense')
+                                            .sort((a,b) => new Date(b.date) - new Date(a.date))
+                                            .map(entry => (
+                                            <tr key={entry.id} className="hover:bg-gray-50">
+                                                <td className="py-3 text-gray-600">{new Date(entry.date).toLocaleDateString('pt-BR')}</td>
+                                                <td className="py-3 font-medium text-gray-800">{entry.desc}</td>
+                                                <td className="py-3 text-gray-500 text-xs"><span className="bg-gray-100 px-2 py-1 rounded border border-gray-200">{entry.category}</span></td>
+                                                <td className="py-3 text-right font-bold text-red-600">
+                                                    - R$ {entry.value.toFixed(2)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {financialEntries.filter(e => e.status === 'paid' && e.type === 'expense').length === 0 && (
+                                    <p className="text-center text-gray-400 py-8">Nenhum pagamento registrado no histórico.</p>
+                                )}
+                            </div>
+                        )}
+
                         {view === 'settings' && (
                             <div className="space-y-6">
                                 <div className="bg-white p-6 rounded-xl shadow border border-gray-100 text-center">
